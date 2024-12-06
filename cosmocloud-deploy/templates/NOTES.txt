@@ -1,22 +1,54 @@
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
-{{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "cosmocloud-deploy.fullname" . }})
+CosmoCloud Deployment Notes
+============================
+
+1. Accessing the Frontend Service:
+-----------------------------------
+The frontend service is exposed as a NodePort service.
+
+To access the frontend, run the following commands:
+
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "cosmocloud-deploy.fullname" . }}-frontend-svc)
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "cosmocloud-deploy.fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "cosmocloud-deploy.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
+  echo "Frontend URL: http://$NODE_IP:$NODE_PORT"
+
+Your frontend service should be accessible at the above URL.
+
+2. Accessing the Backend Service:
+----------------------------------
+The backend service is a ClusterIP service and accessible only within the cluster.
+
+You can access it by running:
+
   export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "cosmocloud-deploy.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
   export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
+  echo "To access the backend, run the following port-forward command:"
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
-{{- end }}
+  echo "Backend URL: http://127.0.0.1:8080"
+
+3. Redis Service:
+------------------
+The Redis service is running as a ClusterIP service within the cluster. 
+
+To check the Redis connection, you can run:
+
+  kubectl run --rm -it redis-client --image=redis --restart=Never -- bash -c "redis-cli -h redis-svc ping"
+
+This will verify the Redis service is reachable and functioning correctly.
+
+4. Running Helm Tests:
+-----------------------
+Once deployed, you can run connection tests for your services by executing the following command:
+  
+  helm test {{ .Release.Name }}
+
+This will verify:
+- The backend can successfully connect to Redis.
+- The frontend can successfully connect to the backend.
+
+5. Uninstalling the Release:
+----------------------------
+To uninstall the release, run the following command:
+
+  helm uninstall {{ .Release.Name }}
+
+
